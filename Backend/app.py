@@ -1,8 +1,9 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import os
-import fitz  # PyMuPDF
+from pdf2image import convert_from_bytes
 import base64
+import io
 from openai import OpenAI
 import requests
 import re
@@ -41,21 +42,18 @@ def convert_pdf_to_images(pdf_bytes):
     try:
         print('  📄 Convirtiendo PDF a imágenes...')
         
-        pdf_document = fitz.open(stream=pdf_bytes, filetype="pdf")
+        # Usar pdf2image (funciona con Docker + poppler)
+        images = convert_from_bytes(pdf_bytes, dpi=200, fmt='png')
         
         base64_images = []
-        max_pages = min(pdf_document.page_count, 5)
+        max_pages = min(len(images), 5)
         
-        for page_num in range(max_pages):
-            page = pdf_document[page_num]
-            mat = fitz.Matrix(2.5, 2.5)
-            pix = page.get_pixmap(matrix=mat)
-            img_bytes = pix.pil_tobytes(format="PNG")
-            img_base64 = base64.b64encode(img_bytes).decode()
+        for i in range(max_pages):
+            buffered = io.BytesIO()
+            images[i].save(buffered, format="PNG")
+            img_base64 = base64.b64encode(buffered.getvalue()).decode()
             base64_images.append(img_base64)
-            print(f'  ✅ Página {page_num + 1} convertida')
-        
-        pdf_document.close()
+            print(f'  ✅ Página {i + 1} convertida')
         
         if not base64_images:
             raise Exception('No se pudieron extraer imágenes del PDF')
