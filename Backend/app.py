@@ -28,7 +28,13 @@ def get_openai_client():
     api_key = os.getenv('OPENAI_API_KEY')
     if not api_key:
         raise Exception('OPENAI_API_KEY no configurada')
-    return OpenAI(api_key=api_key)
+
+    # Asignar la KEY en el entorno (requerido para OpenAI v1.x)
+    os.environ["OPENAI_API_KEY"] = api_key
+
+    # Crear cliente sin parámetros (la librería toma la key desde el entorno)
+    return OpenAI()
+
 
 def extract_cedula_from_filename(filename):
     """Extraer cédula (10 dígitos) del nombre del archivo"""
