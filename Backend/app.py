@@ -29,11 +29,10 @@ def get_openai_client():
     if not api_key:
         raise Exception('OPENAI_API_KEY no configurada')
     
-    # En openai>=1.0.0, la API key se pasa por variable de entorno
-    os.environ["OPENAI_API_KEY"] = api_key
-    
-    # Constructor sin parámetros (lee de variables de entorno)
-    return OpenAI()
+    # OpenAI 1.3.5 usa api_key en el constructor
+    from openai import OpenAI
+    client = OpenAI(api_key=api_key)
+    return client
 
 def extract_cedula_from_filename(filename):
     """Extraer cédula (10 dígitos) del nombre del archivo"""
