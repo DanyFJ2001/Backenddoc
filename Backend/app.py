@@ -15,8 +15,7 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-# Cliente OpenAI global
-client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+# NO crear cliente global - se crea en cada request
 
 def extract_cedula_from_filename(filename):
     match = re.search(r'(\d{10})', filename)
@@ -137,12 +136,33 @@ JSON:
             }
         })
     
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        max_tokens=2500,
-        temperature=0.1,
-        messages=[{"role": "user", "content": content}]
-    )
+    # Crear cliente DENTRO de la función (evita problema de proxies en init)
+    api_key = os.getenv('OPENAI_API_KEY')
+    if not api_key:
+        raise Exception('OPENAI_API_KEY no configurada')
+    
+    # Limpiar variables de proxy que Render/Railway inyectan
+    proxy_vars = ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy']
+    original_env = {}
+    for var in proxy_vars:
+        if var in os.environ:
+            original_env[var] = os.environ[var]
+            del os.environ[var]
+    
+    try:
+        # Crear cliente sin proxies
+        client = OpenAI(api_key=api_key)
+        
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            max_tokens=2500,
+            temperature=0.1,
+            messages=[{"role": "user", "content": content}]
+        )
+    finally:
+        # Restaurar variables de proxy
+        for var, value in original_env.items():
+            os.environ[var] = value
     
     extracted_data = {
         'aptitudMedica': 'No especificado',
