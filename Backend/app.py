@@ -41,11 +41,34 @@ def get_cedula_info(cedula):
         response = requests.post(
             'https://si.secap.gob.ec/sisecap/logeo_web/json/busca_persona_registro_civil.php',
             data={'documento': cedula, 'tipo': 1},
-            timeout=5
+            timeout=10  # Aumentado a 10 segundos
         )
-        return response.json()
+        
+        # Verificar que la respuesta sea exitosa
+        if response.status_code != 200:
+            print(f'  ⚠️  API cédula respondió con código: {response.status_code}')
+            return None
+            
+        data = response.json()
+        
+        # Verificar que tenga datos válidos
+        if not data or not data.get('nombres'):
+            print(f'  ⚠️  API cédula no retornó datos válidos')
+            return None
+            
+        return data
+        
+    except requests.exceptions.Timeout:
+        print(f'  ⚠️  Timeout consultando API de cédula (>10s)')
+        return None
+    except requests.exceptions.RequestException as e:
+        print(f'  ⚠️  Error de red consultando cédula: {str(e)}')
+        return None
+    except json.JSONDecodeError as e:
+        print(f'  ⚠️  Respuesta de API cédula no es JSON válido: {str(e)}')
+        return None
     except Exception as e:
-        print(f'  ⚠️  Error consultando cédula: {str(e)}')
+        print(f'  ⚠️  Error inesperado consultando cédula: {str(e)}')
         return None
 
 def convert_pdf_to_images(pdf_bytes):
@@ -84,18 +107,29 @@ def convert_pdf_to_images(pdf_bytes):
 def process_pdf(pdf_bytes, filename):
     """Procesar PDF completo: extraer cédula, convertir a imágenes y analizar con IA"""
     
-    # Extraer cédula del nombre del archivo
+    # Extraer cédula del nombre del archivo (opcional)
     cedula = extract_cedula_from_filename(filename)
     cedula_info = None
     
     if cedula:
         print(f'  ✓ Cédula encontrada: {cedula}')
-        cedula_info = get_cedula_info(cedula)
-        if cedula_info:
-            print(f'  ✓ Datos: {cedula_info.get("nombres")} {cedula_info.get("apellidos")}')
+        try:
+            cedula_info = get_cedula_info(cedula)
+            if cedula_info and cedula_info.get('nombres'):
+                print(f'  ✓ Datos obtenidos: {cedula_info.get("nombres")} {cedula_info.get("apellidos")}')
+            else:
+                print(f'  ⚠️  No se encontraron datos para cédula: {cedula}')
+        except Exception as e:
+            print(f'  ⚠️  Error consultando cédula (continuando sin datos): {str(e)}')
+    else:
+        print(f'  ℹ️  No se encontró cédula en el nombre del archivo')
     
-    # Convertir PDF a imágenes
-    images = convert_pdf_to_images(pdf_bytes)
+    # Convertir PDF a imágenes (esto es crítico, si falla aquí sí debe parar)
+    try:
+        images = convert_pdf_to_images(pdf_bytes)
+    except Exception as e:
+        print(f'  ❌ Error crítico convirtiendo PDF: {str(e)}')
+        raise Exception(f'No se pudo convertir el PDF a imágenes: {str(e)}')
     
     print(f'  🔄 Analizando {len(images)} página(s) con OpenAI GPT-4 Vision...')
     
@@ -202,12 +236,16 @@ Responde SOLO con este JSON:
         print(f'  ⚠️  Error parseando JSON: {str(e)}')
         print(f'  Respuesta original: {respuesta}')
     
+    # Preparar datos de retorno con valores seguros
+    nombre = cedula_info.get('nombres', 'Sin datos') if cedula_info else 'Sin datos'
+    apellido = cedula_info.get('apellidos', 'Sin datos') if cedula_info else 'Sin datos'
+    
     # Retornar datos completos
     return {
         'fileName': filename,
-        'cedula': cedula or '-',
-        'nombre': cedula_info.get('nombres', '-') if cedula_info else '-',
-        'apellido': cedula_info.get('apellidos', '-') if cedula_info else '-',
+        'cedula': cedula if cedula else 'No detectada',
+        'nombre': nombre,
+        'apellido': apellido,
         **extracted_data
     }
 
