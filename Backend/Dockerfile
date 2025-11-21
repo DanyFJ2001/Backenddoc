@@ -1,41 +1,24 @@
-# Usar imagen base de Python con Debian
-FROM python:3.11-slim-bullseye
+# Usar Python 3.11
+FROM python:3.11-slim
 
-# Instalar poppler-utils (requerido para pdf2image)
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    poppler-utils \
+# Instalar dependencias del sistema para PyMuPDF
+RUN apt-get update && apt-get install -y \
+    libmupdf-dev \
+    mupdf-tools \
     && rm -rf /var/lib/apt/lists/*
 
-# Crear directorio de trabajo
+# Directorio de trabajo
 WORKDIR /app
 
-# Copiar solo requirements primero (para cache de Docker)
+# Copiar requirements e instalar
 COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Instalar dependencias Python
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
-
-# Copiar el resto del código
+# Copiar código
 COPY . .
 
-# Variable de entorno para el puerto (Render la asigna automáticamente)
-ENV PORT=10000
-
-# Exponer el puerto
+# Puerto
 EXPOSE 10000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:10000/health')"
-
-# Comando de inicio con configuración optimizada
-CMD gunicorn --bind 0.0.0.0:$PORT \
-    --workers 2 \
-    --threads 2 \
-    --timeout 120 \
-    --access-logfile - \
-    --error-logfile - \
-    --log-level info \
-    app:app
+# Comando de inicio
+CMD ["gunicorn", "--bind", "0.0.0.0:10000", "--workers", "2", "--timeout", "120", "app:app"]
